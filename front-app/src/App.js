@@ -20,7 +20,6 @@ function App() {
       <Routes>
         <Route path="/register" element={<Register />} />
         <Route path="/login" element={<Login setAuthToken={setAuthToken} />} />
-        <Route path="/login" element={<Login setAuthToken={setAuthToken} />} />
         <Route path="/tariff" element={
           <PrivateRoute>
             <Tariff authToken={authToken} />
@@ -32,7 +31,7 @@ function App() {
           </PrivateRoute>
         } />
         <Route path="/logout" element={<Logout setAuthToken={setAuthToken} />} />
-        <Route path="/" element={<Navigate to="/dashboard" />} />
+        <Route path="/" element={<Navigate to="/login" />} />
       </Routes>
     </Router>
   );
