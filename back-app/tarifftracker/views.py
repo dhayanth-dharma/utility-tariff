@@ -142,6 +142,9 @@ def tariff(request):
                 cost_first_year=context['cost_first_year']
             )
 
+            # Send webhook notification
+            send_webhook_notification(request, project)
+
             ProposalUtility.objects.create(
                 project=project,
                 openei_id=selected_tariff.get('id', ''),
@@ -160,6 +163,8 @@ def project_list(request):
     projects = Project.objects.filter(user=request.user).order_by('-created_at')
     return JsonResponse(projects)
 
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def utility_cost_graph(request):
@@ -172,6 +177,8 @@ def utility_cost_graph(request):
     utility_costs = calculate_utility_costs(kwh_consumption, average_rate, escalator)
 
     return Response({'utility_costs': utility_costs}, status=status.HTTP_200_OK)
+
+
 
 def calculate_utility_costs(kwh_consumption, average_rate, escalator, years=20):
     """
@@ -200,3 +207,20 @@ def calculate_utility_costs(kwh_consumption, average_rate, escalator, years=20):
         average_rate_dollars *= (1 + escalator)
 
     return yearly_costs
+
+def send_webhook_notification(request, project):
+    # Prepare webhook notification
+    webhook_url = "https://webhook.site/#!/abad1e6f-3d72-4ead-9f06-e9a519d8b4c9"
+    webhook_payload = {
+        "event": "project_created",
+        "project_id": project.id,
+        "user": request.user.username,
+    }
+        # Send the webhook notification
+    try:
+        requests.post(webhook_url, json=webhook_payload)
+        print("Webhook notification sent")
+    except requests.exceptions.RequestException as e:
+        # Handle the exception (e.g., log it)
+        print(f"Webhook notification failed: {e}")
+
