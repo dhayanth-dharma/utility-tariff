@@ -75,11 +75,10 @@ class UserLogoutView(APIView):
 
 def get_tariff_data(address):
     api_key = "cftiXJ0ooQD6Jm9OP1XWPwL3CMf5lreZHaGBAp7H"
-    api_url = f"https://api.openei.org/utility_rates?version=latest&address={address}&approved=true&format=json&api_key={api_key}"
+    api_url = f"https://api.openei.org/utility_rates?version=latest&address={address}&detail=full&approved=true&format=json&api_key={api_key}"
     response = requests.get(api_url)
     return response.json()
 
-@csrf_exempt
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def tariff(request):
@@ -119,7 +118,7 @@ def tariff(request):
                     most_likely_tariff = tariff
 
         if tariffs:
-            selected_tariff = request.POST.get('selected_tariff')
+            selected_tariff = data.get('selected_tariff')
             if selected_tariff:
                 selected_tariff = next((t for t in tariffs if t['name'] == selected_tariff), most_likely_tariff)
             else:
@@ -131,7 +130,7 @@ def tariff(request):
                 'escalator': escalator * 100,
                 'selected_tariff': selected_tariff,
                 'tariffs': tariffs,
-                'cost_first_year': kwh * selected_tariff['rate'] / 100,  # Convert cents to dollars
+                'cost_first_year': kwh * selected_tariff['rate'] / 100,  # Convert cents to dollars. selected_tariff_rate is average per kWh
             }
             
             project = Project.objects.create(
@@ -152,12 +151,52 @@ def tariff(request):
                 rate_structure=selected_tariff.get('energyratestructure', [])
             )
 
-            return JsonResponse(context)
+            return Response(context, status=status.HTTP_200_OK)
 
-    return JsonResponse({"error": "No utility rates found for the given address."}, status=400)
+    return Response({"error": "No utility rates found for the given address."}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def project_list(request):
     projects = Project.objects.filter(user=request.user).order_by('-created_at')
     return JsonResponse(projects)
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def utility_cost_graph(request):
+    data = request.data
+    kwh_consumption = data.get('kWh_consumption', 1000)
+    average_rate = data.get('average_rate', 5.0)  # in ¢/kWh
+    escalator = data.get('escalator', 0.04)  # as a decimal (4%)
+
+    # Calculate utility costs over 20 years
+    utility_costs = calculate_utility_costs(kwh_consumption, average_rate, escalator)
+
+    return Response({'utility_costs': utility_costs}, status=status.HTTP_200_OK)
+
+def calculate_utility_costs(kwh_consumption, average_rate, escalator, years=20):
+    """
+    Calculate the projected utility costs over a specified number of years.
+
+    Parameters:
+    - kwh_consumption: The annual electricity consumption in kWh.
+    - average_rate: The average rate in ¢/kWh.
+    - escalator: The annual increase in rates as a decimal (e.g., 0.04 for 4%).
+    - years: The number of years to project costs for (default is 20).
+
+    Returns:
+    - A list of projected utility costs for each year.
+    """
+    # Convert average rate from ¢/kWh to $/kWh
+    average_rate_dollars = average_rate / 100  # Convert cents to dollars
+    
+    yearly_costs = []  # List to hold the cost for each year
+
+    for year in range(years):
+        # Calculate the cost for the current year
+        cost = kwh_consumption * average_rate_dollars
+        yearly_costs.append(cost)
+        
+        # Increase the average rate by the escalator percentage for the next year
+        average_rate_dollars *= (1 + escalator)
+
+    return yearly_costs
